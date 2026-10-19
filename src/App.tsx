@@ -17,6 +17,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HelpSupportPage } from './pages/HelpSupportPage';
 import { ReelsFeed } from './components/video/ReelsFeed';
 import { VideoPlayer } from './components/video/VideoPlayer';
+import { VideoErrorBoundary } from './components/video/VideoErrorBoundary';
 import { FirebaseSetupModal } from './components/modals/FirebaseSetupModal';
 import { ContentItem, Episode, ReelItem } from './types';
 import { INITIAL_CATALOG } from './data/mockCatalog';
@@ -309,42 +310,44 @@ function MainLayout() {
       {/* Floating Fullscreen Video Player Modal */}
       {activePlayback && (
         <div className="fixed inset-0 z-50 bg-black flex items-center justify-center animate-fade-in">
-          <VideoPlayer
-            contentId={activePlayback.content.id}
-            episodeId={activePlayback.episode?.id}
-            title={activePlayback.content.title}
-            subtitle={
-              activePlayback.episode
-                ? `Episode ${activePlayback.episode.episodeNumber}: ${activePlayback.episode.title}`
-                : activePlayback.content.duration
-            }
-            streamUrl={
-              activePlayback.episode?.streamUrl ||
-              activePlayback.content.streamUrl ||
-              'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
-            }
-            hlsUrl={
-              activePlayback.episode?.hlsUrl ||
-              activePlayback.content.hlsUrl
-            }
-            posterUrl={
-              activePlayback.episode?.thumbnailUrl || activePlayback.content.bannerUrl
-            }
-            initialTime={
-              getWatchProgress(
-                activePlayback.content.id,
-                activePlayback.episode?.id
-              )?.positionSeconds || 0
-            }
-            availableAudios={activePlayback.content.audioLanguages}
-            availableSubtitles={activePlayback.content.subtitleLanguages}
-            onProgress={handlePlayerProgress}
-            hasNextEpisode={Boolean(hasNextEpisode)}
-            hasPrevEpisode={Boolean(hasPrevEpisode)}
-            onNextEpisode={handleNextEpisode}
-            onPrevEpisode={handlePrevEpisode}
-            onClose={() => setActivePlayback(null)}
-          />
+          <VideoErrorBoundary onClose={() => setActivePlayback(null)}>
+            <VideoPlayer
+              contentId={activePlayback.content.id}
+              episodeId={activePlayback.episode?.id}
+              title={activePlayback.content.title}
+              subtitle={
+                activePlayback.episode
+                  ? `Episode ${activePlayback.episode.episodeNumber}: ${activePlayback.episode.title}`
+                  : activePlayback.content.duration
+              }
+              streamUrl={
+                activePlayback.episode?.streamUrl ||
+                activePlayback.content.streamUrl ||
+                'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
+              }
+              hlsUrl={
+                activePlayback.episode?.hlsUrl ||
+                activePlayback.content.hlsUrl
+              }
+              posterUrl={
+                activePlayback.episode?.thumbnailUrl || activePlayback.content.bannerUrl
+              }
+              initialTime={
+                getWatchProgress(
+                  activePlayback.content.id,
+                  activePlayback.episode?.id
+                )?.positionSeconds || 0
+              }
+              availableAudios={activePlayback.content.audioLanguages}
+              availableSubtitles={activePlayback.content.subtitleLanguages}
+              onProgress={handlePlayerProgress}
+              hasNextEpisode={Boolean(hasNextEpisode)}
+              hasPrevEpisode={Boolean(hasPrevEpisode)}
+              onNextEpisode={handleNextEpisode}
+              onPrevEpisode={handlePrevEpisode}
+              onClose={() => setActivePlayback(null)}
+            />
+          </VideoErrorBoundary>
         </div>
       )}
 

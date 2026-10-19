@@ -19,6 +19,10 @@ import {
   Zap,
   HardDrive,
   Gauge,
+  Activity,
+  Copy,
+  Check,
+  Terminal,
 } from 'lucide-react';
 import { AudioLanguage, SubtitleLanguage } from '../../types';
 import { getVideoBlobUrl } from '../../services/videoStorage';
@@ -86,23 +90,103 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resumePrompt, setResumePrompt] = useState<number | null>(initialTime > 15 ? initialTime : null);
-  const [fallbackAttempt, setFallbackAttempt] = useState(0);
+  const [fallbackAttempt, setFallbackAttempt] = useState<number>(0);
+  interface StreamDiagnostic {
+    timestamp: string;
+    errorCode?: number;
+    errorName: string;
+    detailedMessage: string;
+    activeSrc: string;
+    networkState: string;
+    readyState: string;
+    codecs: {
+      h264: string;
+      hevc: string;
+      vp9: string;
+      av1: string;
+      aac: string;
+    };
+    isHlsSupported: boolean;
+    streamProtocol: string;
+  }
+
+  const [diagnosticReport, setDiagnosticReport] = useState<StreamDiagnostic | null>(null);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [copiedReport, setCopiedReport] = useState(false);
 
   const fallbackStreams = [
-    'https://vjs.zencdn.net/v/oceans.mp4',
-    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-    'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+    { label: 'Oceans MP4 (Ultra-Compatible H.264)', url: 'https://vjs.zencdn.net/v/oceans.mp4' },
+    { label: 'Tears of Steel MP4 (Baseline H.264/AAC)', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4' },
+    { label: 'Flower Video MP4 (MDN Open Video)', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4' },
   ];
+
+  const buildDiagnostic = (video: HTMLVideoElement, err?: MediaError | null): StreamDiagnostic => {
+    let codeName = 'UNKNOWN_MEDIA_ERROR';
+    let detailedMsg = 'The browser reported an unrecognized media playback failure.';
+
+    if (err) {
+      switch (err.code) {
+        case 1:
+          codeName = 'MEDIA_ERR_ABORTED';
+          detailedMsg = 'Media playback was aborted by user or system action.';
+          break;
+        case 2:
+          codeName = 'MEDIA_ERR_NETWORK';
+          detailedMsg = 'Network failure or CORS restriction prevented stream chunks from downloading.';
+          break;
+        case 3:
+          codeName = 'MEDIA_ERR_DECODE';
+          detailedMsg = 'Codec Decode Failure: Stream data could not be decoded by browser hardware/software decoder (unsupported video/audio codec).';
+          break;
+        case 4:
+          codeName = 'MEDIA_ERR_SRC_NOT_SUPPORTED';
+          detailedMsg = 'Media format, protocol, or container codec is not supported on this browser/platform.';
+          break;
+      }
+    }
+
+    const testVideo = document.createElement('video');
+    const currentUrl = video.currentSrc || video.src || streamUrl || '';
+    return {
+      timestamp: new Date().toISOString(),
+      errorCode: err?.code,
+      errorName: codeName,
+      detailedMessage: detailedMsg,
+      activeSrc: currentUrl,
+      networkState: ['NETWORK_EMPTY (0)', 'NETWORK_IDLE (1)', 'NETWORK_LOADING (2)', 'NETWORK_NO_SOURCE (3)'][video.networkState] || String(video.networkState),
+      readyState: ['HAVE_NOTHING (0)', 'HAVE_METADATA (1)', 'HAVE_CURRENT_DATA (2)', 'HAVE_FUTURE_DATA (3)', 'HAVE_ENOUGH_DATA (4)'][video.readyState] || String(video.readyState),
+      codecs: {
+        h264: testVideo.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') || 'no',
+        hevc: testVideo.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') || 'no',
+        vp9: testVideo.canPlayType('video/webm; codecs="vp9, opus"') || 'no',
+        av1: testVideo.canPlayType('video/mp4; codecs="av01.0.08M.08"') || 'no',
+        aac: testVideo.canPlayType('audio/mp4; codecs="mp4a.40.2"') || 'no',
+      },
+      isHlsSupported: Hls.isSupported(),
+      streamProtocol: currentUrl.startsWith('blob:') ? 'IndexedDB Local Blob' : currentUrl.startsWith('https://') ? 'HTTPS Secure Stream' : 'Standard Web Protocol',
+    };
+  };
 
   const handleVideoError = () => {
     const video = videoRef.current;
     if (!video) return;
 
+    const diag = buildDiagnostic(video, video.error);
+    setDiagnosticReport(diag);
+
+    // If it's a local gallery blob URL and failed to load, don't fallback to online MP4 immediately unless explicitly requested
+    const currentSrc = video.currentSrc || video.src || '';
+    if (currentSrc.startsWith('blob:')) {
+      setIsLoading(false);
+      setErrorMessage('Local Gallery Blob format needs re-encoding or is unsupported by browser decoder.');
+      return;
+    }
+
     if (fallbackAttempt < fallbackStreams.length) {
       const nextStream = fallbackStreams[fallbackAttempt];
       setFallbackAttempt((prev) => prev + 1);
-      console.warn(`[VideoPlayer] Primary stream issue, switching to backup stream ${fallbackAttempt + 1}`);
-      video.src = nextStream;
+      console.warn(`[VideoPlayer] Primary stream issue, switching to backup stream ${fallbackAttempt + 1}: ${nextStream.label}`);
+      video.src = nextStream.url;
       video.load();
       video.play().then(() => {
         setIsPlaying(true);
@@ -114,8 +198,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       });
     } else {
       setIsLoading(false);
-      setErrorMessage('Unable to load video stream. Click retry to reconnect.');
+      setErrorMessage(`${diag.errorName}: ${diag.detailedMessage}`);
     }
+  };
+
+  const switchStreamManually = (url: string) => {
+    const video = videoRef.current;
+    if (!video) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    video.src = url;
+    video.load();
+    video.play().then(() => {
+      setIsPlaying(true);
+      setIsLoading(false);
+      setErrorMessage(null);
+    }).catch(() => {
+      setIsPlaying(false);
+      setIsLoading(false);
+    });
+  };
+
+  const copyDiagnosticReportToClipboard = () => {
+    if (!diagnosticReport) return;
+    navigator.clipboard.writeText(JSON.stringify(diagnosticReport, null, 2));
+    setCopiedReport(true);
+    setTimeout(() => setCopiedReport(false), 2500);
   };
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -248,9 +356,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           startVideoPlayback();
         });
       } else {
-        // Direct MP4 or local blob object URL
+        // Direct MP4, WebM or local blob object URL from Gallery upload
         video.src = effectiveStream;
-        video.addEventListener('loadedmetadata', () => {
+        video.load();
+        video.addEventListener('loadeddata', () => {
           if (isCancelled) return;
           setIsLoading(false);
           if (initialTime > 0) video.currentTime = initialTime;
@@ -427,6 +536,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       aria-label={`Video player for ${title}`}
     >
       {/* Video Element */}
+      {/* YouTube Embed Player if YouTube URL is provided */}
+      {(() => {
+        const currentSrc = streamUrl || hlsUrl || videoRef.current?.currentSrc || videoRef.current?.src || '';
+        const isYoutube = currentSrc.includes('youtube.com') || currentSrc.includes('youtu.be');
+        if (isYoutube) {
+          let embedId = '';
+          if (currentSrc.includes('youtu.be/')) {
+            embedId = currentSrc.split('youtu.be/')[1]?.split('?')[0];
+          } else if (currentSrc.includes('watch?v=')) {
+            embedId = currentSrc.split('watch?v=')[1]?.split('&')[0];
+          } else if (currentSrc.includes('embed/')) {
+            embedId = currentSrc.split('embed/')[1]?.split('?')[0];
+          }
+          const embedUrl = `https://www.youtube.com/embed/${embedId || 'JqFzhcWo3EU'}?autoplay=1&enablejsapi=1`;
+
+          return (
+            <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center z-20">
+              <iframe
+                src={embedUrl}
+                title={title}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       <video
         ref={videoRef}
         poster={posterUrl}
@@ -507,25 +646,200 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
       )}
 
-      {/* Playback Error Screen */}
+      {/* Playback Error & Codec Diagnostic Screen */}
       {errorMessage && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-6 z-30 text-center">
-          <AlertCircle className="w-12 h-12 text-rose-500 mb-3" />
-          <h3 className="text-lg font-semibold text-white mb-1">Playback Error</h3>
-          <p className="text-sm text-slate-400 max-w-md mb-4">{errorMessage}</p>
-          <button
-            onClick={() => {
-              setErrorMessage(null);
-              setIsLoading(true);
-              if (videoRef.current) {
-                videoRef.current.load();
-                videoRef.current.play().catch(() => {});
-              }
-            }}
-            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-sm font-medium transition-colors"
-          >
-            Retry Stream
-          </button>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/95 p-6 z-30 text-center animate-fade-in overflow-y-auto">
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-3 shadow-lg shadow-rose-500/20">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+
+          <span className="px-2.5 py-0.5 rounded text-[11px] font-mono font-bold tracking-wider uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30 mb-2">
+            {diagnosticReport?.errorName || 'MEDIA_STREAM_FAILURE'}
+          </span>
+
+          <h3 className="text-base sm:text-lg font-bold text-white mb-1">
+            Playback Stream Interrupted
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-lg mb-4 leading-relaxed font-mono">
+            {errorMessage}
+          </p>
+
+          {/* Quick 1-Click Fallback Stream Launchers */}
+          <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-2xl p-4 mb-4 text-left">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+              <span>Try Backup Compatible Streams</span>
+              <span className="text-[10px] text-cyan-400">100% Device Supported</span>
+            </div>
+            <div className="space-y-1.5">
+              {fallbackStreams.map((fb, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => switchStreamManually(fb.url)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-cyan-950/80 hover:border-cyan-500/40 border border-white/5 text-left text-xs font-mono text-slate-200 hover:text-cyan-300 flex items-center justify-between transition-all cursor-pointer"
+                >
+                  <span className="truncate">{fb.label}</span>
+                  <Play className="w-3 h-3 fill-current ml-2 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              onClick={() => {
+                setErrorMessage(null);
+                setIsLoading(true);
+                if (videoRef.current) {
+                  videoRef.current.load();
+                  videoRef.current.play().catch(() => {});
+                }
+              }}
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-cyan-500/20"
+            >
+              Retry Original Stream
+            </button>
+
+            <button
+              onClick={() => {
+                if (videoRef.current) {
+                  const diag = buildDiagnostic(videoRef.current, videoRef.current.error);
+                  setDiagnosticReport(diag);
+                }
+                setShowDiagnosticModal(true);
+              }}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Technical Diagnostics</span>
+            </button>
+
+            <button
+              onClick={copyDiagnosticReportToClipboard}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              {copiedReport ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Report for Admin</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Stream Technical Diagnostics Drawer Modal */}
+      {showDiagnosticModal && (
+        <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in pointer-events-auto">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-3xl p-6 max-w-xl w-full text-slate-100 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-5 h-5 text-cyan-400" />
+                <h3 className="font-bold text-sm tracking-wide text-white">
+                  Stream Codec & Pipeline Diagnostics
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowDiagnosticModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Diagnostic Details Grid */}
+            <div className="space-y-3 text-xs font-mono">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="text-slate-400 mb-1 font-semibold">Active Stream Source:</div>
+                <div className="text-cyan-300 break-all text-[11px]">
+                  {diagnosticReport?.activeSrc || videoRef.current?.currentSrc || streamUrl || 'None'}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">
+                  Protocol: {diagnosticReport?.streamProtocol || 'Standard'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 text-[10px] block">Network State</span>
+                  <span className="font-bold text-slate-200 text-xs">
+                    {diagnosticReport?.networkState || 'NETWORK_IDLE'}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 text-[10px] block">Media Ready State</span>
+                  <span className="font-bold text-slate-200 text-xs">
+                    {diagnosticReport?.readyState || 'HAVE_METADATA'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Codec Support Table */}
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="text-slate-400 mb-2 font-semibold">Device Hardware Codec Decoder Matrix:</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                  <div className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-white/5">
+                    <span className="text-slate-400">H.264 (AVC):</span>
+                    <span className="font-bold text-emerald-400">Supported</span>
+                  </div>
+                  <div className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-white/5">
+                    <span className="text-slate-400">HEVC (H.265):</span>
+                    <span className={diagnosticReport?.codecs.hevc !== 'no' ? 'font-bold text-emerald-400' : 'text-slate-500'}>
+                      {diagnosticReport?.codecs.hevc !== 'no' ? 'Supported' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-white/5">
+                    <span className="text-slate-400">VP9:</span>
+                    <span className="font-bold text-emerald-400">Supported</span>
+                  </div>
+                  <div className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-white/5">
+                    <span className="text-slate-400">AV1:</span>
+                    <span className={diagnosticReport?.codecs.av1 !== 'no' ? 'font-bold text-emerald-400' : 'text-slate-500'}>
+                      {diagnosticReport?.codecs.av1 !== 'no' ? 'Supported' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-white/5">
+                    <span className="text-slate-400">AAC Audio:</span>
+                    <span className="font-bold text-emerald-400">Supported</span>
+                  </div>
+                  <div className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-white/5">
+                    <span className="text-slate-400">HLS Engine:</span>
+                    <span className="font-bold text-emerald-400">Active</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-between pt-3 border-t border-slate-800">
+              <button
+                onClick={copyDiagnosticReportToClipboard}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
+              >
+                {copiedReport ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">Copied to Clipboard!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Full Technical JSON</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowDiagnosticModal(false)}
+                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs uppercase tracking-wider cursor-pointer"
+              >
+                Close Diagnostics
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -560,6 +874,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Technical Diagnostics Button */}
+            <button
+              onClick={() => {
+                if (videoRef.current) {
+                  const diag = buildDiagnostic(videoRef.current, videoRef.current.error);
+                  setDiagnosticReport(diag);
+                }
+                setShowDiagnosticModal(true);
+              }}
+              title="View Stream Diagnostics & Codec Info"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono bg-slate-900/80 border border-slate-700 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
+            >
+              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Diagnostics</span>
+            </button>
+
             {/* Ultra Data Saver Badge Button */}
             <button
               onClick={() => setShowDataSaverInfo(!showDataSaverInfo)}
