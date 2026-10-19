@@ -274,7 +274,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (playbackTier === 0 && hlsUrl) {
           sourceUrl = hlsUrl;
       } else if (playbackTier === 1) {
-          sourceUrl = streamUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+          sourceUrl = streamUrl || '';
           const targetId = episodeId || contentId;
           if (targetId) {
             try {
@@ -283,7 +283,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             } catch {}
           }
       } else {
-          sourceUrl = 'https://vjs.zencdn.net/v/oceans.mp4'; // External fallback
+          sourceUrl = ''; // No external fallback
       }
 
       if (isCancelled || !video) return;
