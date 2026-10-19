@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #030712;
+    --text-main: #f8fafc;
+    --accent-main: #06b6d4;
+  }
+
+  html.midnight-cinema {
+    --bg-main: #050508;
+    --text-main: #fff1f2;
+    --accent-main: #e11d48;
+  }
+
+  html.neon-anime {
+    --bg-main: #090914;
+    --text-main: #fdf4ff;
+    --accent-main: #ec4899;
+  }
+
+  html.minimal-studio {
+    --bg-main: #111215;
+    --text-main: #f1f5f9;
+    --accent-main: #94a3b8;
+  }
+
+  html.light-mode {
+    --bg-main: #f8fafc;
+    --text-main: #0f172a;
+    --accent-main: #0284c7;
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+  }
+
+  body {
+    background-color: var(--bg-main, #030712);
+    color: var(--text-main, #f8fafc);
+    overflow-x: hidden;
+  }
+}
+
+/* Custom smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #030712;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #06b6d4;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

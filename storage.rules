@@ -1,0 +1,54 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isContentManager() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'content_manager'
+      );
+    }
+
+    function isCreator() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'creator' ||
+        isContentManager()
+      );
+    }
+
+    // Public poster, backdrop, and thumbnail assets
+    match /posters/{allPaths=**} {
+      allow read: if true;
+      allow write: if isCreator() && request.resource.size < 10 * 1024 * 1024; // 10MB max
+    }
+
+    match /thumbnails/{allPaths=**} {
+      allow read: if true;
+      allow write: if isCreator() && request.resource.size < 5 * 1024 * 1024; // 5MB max
+    }
+
+    // User profile avatars
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == userId && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // Source video uploads (Private bucket folder: only creator or admin can read/write)
+    match /raw-uploads/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isContentManager());
+      allow write: if isCreator() && request.auth.uid == userId && request.resource.size < 2048 * 1024 * 1024; // 2GB max
+    }
+
+    // Processed HLS video packages (master.m3u8, variant playlists, and .ts segments)
+    match /media/{assetId}/{allPaths=**} {
+      // HLS delivery is readable by authenticated users (or public if unlisted/demo)
+      allow read: if true;
+      // Written by transcoding worker service or content managers
+      allow write: if isContentManager();
+    }
+  }
+}

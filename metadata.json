@@ -1,0 +1,6 @@
+{
+  "name": "YEP Streamer",
+  "description": "Next-generation entertainment streaming platform featuring anime, movies, series, reels, multi-language dubs, creator studio, and Gemini AI search.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
