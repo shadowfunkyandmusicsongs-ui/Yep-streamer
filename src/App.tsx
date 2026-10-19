@@ -28,7 +28,10 @@ function MainLayout() {
     try {
       const saved = localStorage.getItem(STORAGE_CATALOG_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       }
     } catch {}
     return INITIAL_CATALOG;
