@@ -86,6 +86,37 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resumePrompt, setResumePrompt] = useState<number | null>(initialTime > 15 ? initialTime : null);
+  const [fallbackAttempt, setFallbackAttempt] = useState(0);
+
+  const fallbackStreams = [
+    'https://vjs.zencdn.net/v/oceans.mp4',
+    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  ];
+
+  const handleVideoError = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (fallbackAttempt < fallbackStreams.length) {
+      const nextStream = fallbackStreams[fallbackAttempt];
+      setFallbackAttempt((prev) => prev + 1);
+      console.warn(`[VideoPlayer] Primary stream issue, switching to backup stream ${fallbackAttempt + 1}`);
+      video.src = nextStream;
+      video.load();
+      video.play().then(() => {
+        setIsPlaying(true);
+        setIsLoading(false);
+        setErrorMessage(null);
+      }).catch(() => {
+        setIsPlaying(false);
+        setIsLoading(false);
+      });
+    } else {
+      setIsLoading(false);
+      setErrorMessage('Unable to load video stream. Click retry to reconnect.');
+    }
+  };
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -146,15 +177,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
 
       video.onerror = () => {
-        console.warn('[VideoPlayer] Media error or unplayable source, falling back to reliable MP4.');
-        if (video.src !== 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4') {
-          video.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
-          video.load();
-          video.play().catch(() => {});
-        } else {
-          setErrorMessage('Unable to load video stream. Please check connection or source.');
-          setIsLoading(false);
-        }
+        handleVideoError();
+      };
+
+      const startVideoPlayback = () => {
+        if (!video || isCancelled) return;
+        video.play().then(() => {
+          if (!isCancelled) {
+            setIsPlaying(true);
+            setIsLoading(false);
+            setErrorMessage(null);
+          }
+        }).catch((err) => {
+          console.warn('[VideoPlayer] Autoplay paused waiting for interaction:', err);
+          if (!isCancelled) {
+            setIsPlaying(false);
+            setIsLoading(false);
+          }
+        });
       };
 
       // Only invoke HLS if hlsUrl is explicitly supplied and points to an .m3u8 manifest
@@ -184,7 +224,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           if (initialTime > 0) {
             video.currentTime = initialTime;
           }
-          video.play().catch(() => setIsPlaying(false));
+          startVideoPlayback();
         });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
@@ -195,7 +235,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             if (!isCancelled && video) {
               video.src = effectiveStream;
               video.load();
-              video.play().catch(() => {});
+              startVideoPlayback();
             }
           }
         });
@@ -205,7 +245,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           if (isCancelled) return;
           setIsLoading(false);
           if (initialTime > 0) video.currentTime = initialTime;
-          video.play().catch(() => setIsPlaying(false));
+          startVideoPlayback();
         });
       } else {
         // Direct MP4 or local blob object URL
@@ -214,7 +254,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           if (isCancelled) return;
           setIsLoading(false);
           if (initialTime > 0) video.currentTime = initialTime;
-          video.play().catch(() => setIsPlaying(false));
+          startVideoPlayback();
         });
         setAvailableQualities(['auto', '1080p', '720p', '480p']);
       }
@@ -394,16 +434,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         onClick={togglePlay}
         onTimeUpdate={onTimeUpdate}
         onLoadedMetadata={onLoadedMetadata}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setIsLoading(false);
+          setErrorMessage(null);
+        }}
         onPause={() => setIsPlaying(false)}
         onWaiting={() => setIsLoading(true)}
-        onPlaying={() => setIsLoading(false)}
-        onError={() => {
+        onPlaying={() => {
+          setIsPlaying(true);
           setIsLoading(false);
-          setErrorMessage('Stream connection interrupted. Click retry to reconnect.');
+          setErrorMessage(null);
         }}
+        onError={handleVideoError}
         className="w-full h-full object-contain cursor-pointer"
       />
+
+      {/* Large Center Play Button when Paused or Autoplay Blocked */}
+      {!isPlaying && !isLoading && !errorMessage && (
+        <button
+          onClick={togglePlay}
+          className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-cyan-500/90 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-2xl hover:scale-110 transition-all z-20 cursor-pointer pointer-events-auto"
+          aria-label="Play video"
+        >
+          <Play className="w-9 h-9 fill-current ml-1" />
+        </button>
+      )}
 
       {/* Simulated Closed Captions when enabled */}
       {selectedSubtitle !== 'off' && isPlaying && (
