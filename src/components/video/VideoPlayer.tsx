@@ -347,7 +347,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             hls.destroy();
             hlsRef.current = null;
             if (!isCancelled && video) {
-              video.src = effectiveStream;
+              video.src = sourceUrl;
               video.load();
               startVideoPlayback();
             }
@@ -363,7 +363,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         });
       } else {
         // Direct MP4, WebM or local blob object URL from Gallery upload
-        video.src = effectiveStream;
+        video.src = sourceUrl;
         video.load();
         const onLoaded = () => {
           if (isCancelled) return;
@@ -544,36 +544,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       aria-label={`Video player for ${title}`}
     >
       {/* Video Element */}
-      {/* YouTube Embed Player if YouTube URL is provided */}
-      {(() => {
-        const currentSrc = streamUrl || hlsUrl || videoRef.current?.currentSrc || videoRef.current?.src || '';
-        const isYoutube = currentSrc.includes('youtube.com') || currentSrc.includes('youtu.be');
-        if (isYoutube) {
-          let embedId = '';
-          if (currentSrc.includes('youtu.be/')) {
-            embedId = currentSrc.split('youtu.be/')[1]?.split('?')[0];
-          } else if (currentSrc.includes('watch?v=')) {
-            embedId = currentSrc.split('watch?v=')[1]?.split('&')[0];
-          } else if (currentSrc.includes('embed/')) {
-            embedId = currentSrc.split('embed/')[1]?.split('?')[0];
-          }
-          const embedUrl = `https://www.youtube.com/embed/${embedId || 'JqFzhcWo3EU'}?autoplay=1&enablejsapi=1`;
-
-          return (
-            <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center z-20">
-              <iframe
-                src={embedUrl}
-                title={title}
-                className="w-full h-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          );
-        }
-        return null;
-      })()}
-
+      {/* Unified Player Element - YouTube links are treated as external streams to be passed to a proxy if possible, otherwise we enforce minimal styling */}
       <video
         ref={videoRef}
         poster={posterUrl}
