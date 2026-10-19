@@ -634,9 +634,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        {/* Top Header Bar */}
-        <div className="flex items-center justify-between pointer-events-auto">
-          <div className="flex items-center gap-3">
+        {/* Top Header Bar - Minimalist */}
+        <div className="flex items-center justify-between pointer-events-auto p-4">
             {onClose && (
               <button
                 onClick={onClose}
@@ -646,103 +645,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 <X className="w-5 h-5" />
               </button>
             )}
-            <div>
-              <h2 className="text-sm md:text-base font-semibold text-white truncate max-w-xs md:max-w-md">
+            <h2 className="text-sm font-semibold text-white truncate max-w-sm">
                 {title}
-              </h2>
-              {subtitle && (
-                <p className="text-xs text-slate-300 truncate max-w-xs md:max-w-md">
-                  {subtitle}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Technical Diagnostics Button */}
-            <button
-              onClick={() => {
-                if (videoRef.current) {
-                  const diag = buildDiagnostic(videoRef.current, videoRef.current.error);
-                  setDiagnosticReport(diag);
-                }
-                setShowDiagnosticModal(true);
-              }}
-              title="View Stream Diagnostics & Codec Info"
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono bg-slate-900/80 border border-slate-700 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-all cursor-pointer"
-            >
-              <Activity className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Diagnostics</span>
-            </button>
-
-            {/* Ultra Data Saver Badge Button */}
-            <button
-              onClick={() => setShowDataSaverInfo(!showDataSaverInfo)}
-              title="Ultra Low-Data Mode: 50MB for 4 Hours"
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono transition-all border ${
-                isUltraDataSaver
-                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-md shadow-emerald-950/40'
-                  : 'bg-slate-900/80 border-slate-700 text-slate-300'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="font-bold hidden sm:inline">
-                {isUltraDataSaver ? '50MB / 4hr Saver' : 'Saver Off'}
-              </span>
-              <span className="text-white/80">({dataConsumedMb} MB)</span>
-            </button>
-
-            <span className="text-[11px] font-mono tracking-wider px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 uppercase hidden md:inline">
-              {hlsUrl ? 'HLS Adaptive' : 'Direct MP4'} · {selectedQuality}
-            </span>
-          </div>
+            </h2>
         </div>
-
-        {/* Data Saver Info Popup */}
-        {showDataSaverInfo && (
-          <div className="absolute top-16 right-4 z-40 bg-slate-900/95 border border-emerald-500/40 rounded-2xl p-4 text-xs text-white max-w-xs shadow-2xl backdrop-blur-md animate-fade-in pointer-events-auto">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                <Zap className="w-4 h-4" />
-                Ultra Data Saver Guaranteed
-              </span>
-              <button
-                onClick={() => setShowDataSaverInfo(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed mb-3">
-              Optimized for minimal internet usage. A full 4-hour video plays within only 50MB to 60MB!
-            </p>
-            <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 space-y-1 font-mono text-[11px] mb-3">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Data Used So Far:</span>
-                <span className="text-emerald-400 font-bold">{dataConsumedMb} MB</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">4-Hour Expected:</span>
-                <span className="text-cyan-400 font-bold">~54.7 MB</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Cellular Data Saved:</span>
-                <span className="text-emerald-400 font-bold">94%</span>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsUltraDataSaver(!isUltraDataSaver)}
-              className={`w-full py-1.5 rounded-xl font-bold text-[11px] transition-all flex items-center justify-center gap-1.5 ${
-                isUltraDataSaver
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-slate-950'
-                  : 'bg-slate-800 hover:bg-slate-700 text-white'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>{isUltraDataSaver ? 'Ultra Saver Active (50MB/4hr)' : 'Enable 50MB/4hr Saver'}</span>
-            </button>
-          </div>
-        )}
 
         {/* Center Big Play Button (if paused) */}
         {!isPlaying && !isLoading && (
@@ -750,7 +656,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <button
               onClick={togglePlay}
               aria-label="Play video"
-              className="pointer-events-auto w-16 h-16 md:w-20 md:h-20 rounded-full bg-cyan-600/90 hover:bg-cyan-500 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95"
+              className="pointer-events-auto w-16 h-16 md:w-20 md:h-20 rounded-full bg-cyan-600/90 hover:bg-cyan-400 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95"
             >
               <Play className="w-8 h-8 fill-current translate-x-0.5" />
             </button>
@@ -758,7 +664,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         )}
 
         {/* Bottom Control Bar */}
-        <div className="flex flex-col gap-2 pointer-events-auto">
+        <div className="flex flex-col gap-2 pointer-events-auto p-4 bg-gradient-to-t from-black/80 to-transparent">
           {/* Progress Seek Scrubber */}
           <div className="flex items-center gap-3 w-full group/scrubber">
             <span className="text-xs font-mono text-slate-300 min-w-[45px]">
