@@ -359,12 +359,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         // Direct MP4, WebM or local blob object URL from Gallery upload
         video.src = effectiveStream;
         video.load();
-        video.addEventListener('loadeddata', () => {
+        const onLoaded = () => {
           if (isCancelled) return;
           setIsLoading(false);
           if (initialTime > 0) video.currentTime = initialTime;
           startVideoPlayback();
-        });
+          video.removeEventListener('loadeddata', onLoaded);
+        };
+        video.addEventListener('loadeddata', onLoaded);
         setAvailableQualities(['auto', '1080p', '720p', '480p']);
       }
     }
